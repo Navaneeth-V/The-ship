@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # Ship Proxy - Client-side proxy (browsers connect here)
+  ship-proxy:
+    build:
+      context: ./ship-proxy
+      dockerfile: Dockerfile
+    container_name: ship-proxy
+    ports:
+      - "8080:8080"
+    environment:
+      - OFFSHORE_PROXY_HOST=offshore-proxy
+      - OFFSHORE_PROXY_PORT=9000
+      - LOG_LEVEL=INFO
+    depends_on:
+      - offshore-proxy
+    networks:
+      - proxy-network
+    restart: unless-stopped
+
+  # Offshore Proxy - Server-side proxy (handles actual requests)
+  offshore-proxy:
+    build:
+      context: ./offshore-proxy
+      dockerfile: Dockerfile
+    container_name: offshore-proxy
+    ports:
+      - "9000:9000"  # Exposed for direct access if needed
+    environment:
+      - LOG_LEVEL=INFO
+      - MAX_CONNECTIONS=100
+      - CONNECTION_TIMEOUT=30000
+    networks:
+      - proxy-network
+    restart: unless-stopped
+
+networks:
+  proxy-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  # Optional: for persistent logs
+  ship-logs:
+  offshore-logs:
