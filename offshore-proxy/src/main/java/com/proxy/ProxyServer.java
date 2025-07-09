@@ -155,12 +155,14 @@ public class ProxyServer {
             conn.setRequestProperty(key, headers.getString(key));
         }
 
-        if (!body.isEmpty()) {
+        if (!body.isEmpty() && Arrays.asList("POST", "PUT", "PATCH", "DELETE").contains(method.toUpperCase())) {
             conn.setDoOutput(true);
+            byte[] decodedBody = Base64.getDecoder().decode(body);
             try (OutputStream os = conn.getOutputStream()) {
-                os.write(body.getBytes());
+                os.write(decodedBody);
             }
         }
+
 
         int status = conn.getResponseCode();
         InputStream inputStream = status < 400 ? conn.getInputStream() : conn.getErrorStream();

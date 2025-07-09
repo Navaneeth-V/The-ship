@@ -114,30 +114,61 @@ public class Ship {
                 return;
             }
 
-            if (!requestLine.startsWith("GET http")) {
+            String[] parts = requestLine.split(" ");
+            if (parts.length < 3) {
                 sendError(out, "400 Bad Request");
                 return;
             }
 
-            String fullUrl = requestLine.split(" ")[1];
+            String method = parts[0];
+            String fullUrl = parts[1];
             URL url = new URL(fullUrl);
 
-            // Skip headers
+            // Parse headers
             String headerLine;
-            while ((headerLine = in.readLine()) != null && !headerLine.isEmpty()) {
-                // Skip all headers
+            int contentLength = 0;
+            StringBuilder headersBuilder = new StringBuilder();
+            BufferedReader reader = new BufferedReader(in);
+            Map<String, String> headers = new ConcurrentHashMap<>();
+
+            while ((headerLine = reader.readLine()) != null && !headerLine.isEmpty()) {
+                int colonIndex = headerLine.indexOf(":");
+                if (colonIndex != -1) {
+                    String key = headerLine.substring(0, colonIndex).trim();
+                    String value = headerLine.substring(colonIndex + 1).trim();
+                    headers.put(key, value);
+
+                    if (key.equalsIgnoreCase("Content-Length")) {
+                        contentLength = Integer.parseInt(value);
+                    }
+                }
             }
 
+            // Read body if needed
+            StringBuilder bodyBuilder = new StringBuilder();
+            if (contentLength > 0) {
+                char[] bodyChars = new char[contentLength];
+                reader.read(bodyChars, 0, contentLength);
+                bodyBuilder.append(bodyChars);
+            }
+
+            // Build JSON
             String json = String.format(
-                    "{\"method\":\"GET\",\"protocol\":\"%s\",\"hostname\":\"%s\",\"port\":%d,\"path\":\"%s\",\"headers\":{},\"body\":\"\"}",
-                    url.getProtocol(), url.getHost(), url.getPort() != -1 ? url.getPort() : url.getDefaultPort(),
-                    url.getPath().isEmpty() ? "/" : url.getPath()
+                    "{\"method\":\"%s\",\"protocol\":\"%s\",\"hostname\":\"%s\",\"port\":%d,\"path\":\"%s\",\"headers\":%s,\"body\":\"%s\"}",
+                    method,
+                    url.getProtocol(),
+                    url.getHost(),
+                    url.getPort() != -1 ? url.getPort() : url.getDefaultPort(),
+                    url.getPath().isEmpty() ? "/" : url.getPath(),
+                    mapper.writeValueAsString(headers),
+                    Base64.getEncoder().encodeToString(bodyBuilder.toString().getBytes())
             );
 
             CompletableFuture<String> future = new CompletableFuture<>();
-            requestQueue.offer(new RequestWrapper(json, future, "GET"));
+            requestQueue.offer(new RequestWrapper(json, future, method));
             String response = future.get();
             parseAndRespond(response, out);
+
 
         } catch (Exception e) {
             e.printStackTrace();
